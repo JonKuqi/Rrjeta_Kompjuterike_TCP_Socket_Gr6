@@ -1,12 +1,13 @@
 #include <iostream>
+#include <fstream>
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <thread>
 #include <vector>
 #include <mutex>
+#include <ctime>
 #include <queue>
-#include <condition_variable>
-
+#include <string>
 
 #pragma comment(lib, "Ws2_32.lib")
 
@@ -30,11 +31,50 @@ mutex clientMutex;
 condition_variable clientCondition;
 
 
-void handleClient(SOCKET clientSocket) {
+
+
+
+
+void log(const string& message) {
+
+    lock_guard<mutex> lock(clientMutex);
+    ofstream logFile("server_log.log", ios::app);
+    if (logFile.is_open()) {
+        logFile << message << endl;
+        logFile.close();
+    }
+    else {
+        cerr << "Unable to open log file." << endl;
+    }
+}
+
+
+
+string getCurrentTime() {
+    time_t now = time(0);
+    char buf[80];
+    struct tm timeInfo;
+    localtime_s(&timeInfo, &now); 
+    strftime(buf, sizeof(buf), "%Y-%m-%d %X", &timeInfo);
+    return buf;
+}
+
+
+void handleClient(SOCKET clientSocket, sockaddr_in clientAddr) {
+
     const char* welcomeMessage = "Welcome ... \n";
 
     send(clientSocket, welcomeMessage, strlen(welcomeMessage), 0);
 
+    char clientIP[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &(clientAddr.sin_addr), clientIP, INET_ADDRSTRLEN);
+
+    int clientPort = ntohs(clientAddr.sin_port);
+
+
+
+    //Kur u log u ruje
+    log("Client connected: IP = " + string(clientIP) + ", Port = " + to_string(clientPort) + ", Time = " + getCurrentTime());
 
 
     //Nga klienti
@@ -47,7 +87,8 @@ void handleClient(SOCKET clientSocket) {
             buffer[bytesReceived] = '\0';
             cout << "Received from client: " << buffer << endl;
 
-
+            //Log mesazhet e klientit
+            log("Message from IP " + string(clientIP) + " at " + getCurrentTime() + ": " + buffer);
 
             send(clientSocket, buffer, bytesReceived, 0);
         }
@@ -56,6 +97,9 @@ void handleClient(SOCKET clientSocket) {
         }
 
     }
+
+    // Log  kur disconnect
+    log("Client disconnected: IP = " + string(clientIP) + ", Port = " + to_string(clientPort) + ", Time = " + getCurrentTime());
 
     closesocket(clientSocket);
 
@@ -155,7 +199,7 @@ int main() {
 
 
             //E ban handle funksioni nalt
-            thread clientThread (handleClient, clientSocket);
+            thread clientThread (handleClient, clientSocket, clientAddress);
             clientThread.detach();
 
         }
@@ -180,7 +224,7 @@ int main() {
             cout << "Connecting queued client. Total clients: " << activeClientCounter << "\n";
 
            
-            thread clientThread(handleClient, clientInQueue);
+            thread clientThread(handleClient, clientInQueue, clientAddress);
             clientThread.detach();
         }
 
