@@ -15,6 +15,57 @@ using namespace std;
 #define MAX_CONNECTED 3
 
 
+int activeClientCounter = 0;
+
+queue<SOCKET> clientQueue;
+
+
+
+void handleClient(SOCKET clientSocket) {
+    const char* welcomeMessage = "Welcome ... \n";
+
+    send(clientSocket, welcomeMessage, strlen(welcomeMessage), 0);
+
+
+
+
+    //Nga klienti
+    char buffer[BUFFER_SIZE] = { 0 }; // E mushim me zero si fillim
+
+    int recievedBytes = recv(clientSocket, buffer, BUFFER_SIZE - 1, 0);
+
+ 
+
+    if (recievedBytes > 0) {
+        buffer[recievedBytes] = '\0'; // Ja hjek zerot e len veq mesazhin
+
+        cout << "Received from client: " << buffer << endl;
+     
+    }
+    else if (recievedBytes == 0) {
+        cout << "Client disconnected.\n";
+    }
+    else {
+        cerr << "Receive failed: \n";
+    }
+
+
+    closesocket(clientSocket);
+
+}
+
+
+void checkQueue() {
+
+}
+
+
+
+
+
+
+
+
 int main() {
 
 
@@ -78,22 +129,7 @@ int main() {
 
 
 
-    int activeClientCounter = 0;
-
-
-
     while (true) {
-
-
-
-        if (activeClientCounter == MAX_CONNECTED) {
-            cout << "Maximum number of clients have been reached. Please wait for your turn... " << endl;
-
-            continue;
-        }
-
-
-
 
         clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddress, &clientAddressSize);
 
@@ -105,23 +141,31 @@ int main() {
 
         cout << "Client connected.\n";
 
-        const char* welcome = "Welcome to the server! /\n";
 
-        send(clientSocket, welcome, strlen(welcome), 0);
+        if (activeClientCounter < MAX_CONNECTED) {
 
-        //Me ba handle qetu duhet
+            activeClientCounter++;
+
+            cout << "New client processing. Active clients" << activeClientCounter<<endl;
 
 
-        int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE - 1, 0);
+            //E ban handle funksioni nalt
+            handleClient(clientSocket);
 
-        if (bytesReceived > 0) {
-            buffer[bytesReceived] = '\0'; // Mi hjek zerot me lan veq mesazhin
-            cout << "Received from client: " << buffer << endl;
+            activeClientCounter--;
+
+            //MEsi e ka kry nja kqyr a ka ne queue tjer
+            checkQueue();
+
         }
-        else if (bytesReceived == 0) {
-            cout << "Client disconnected.\n";
+        else {
+            //E mushne queue
+
+            cout << "Max client number reached, adding to the queue. \n";
+            clientQueue.push(clientSocket);
+            
         }
-       
+
 
         closesocket(clientSocket);
         
