@@ -53,20 +53,34 @@ int main() {
         return 1;
     }
 
-    cout << "Server is listening on port " << PORT << "... \n";
 
+    
+
+
+    //Listen serveri
+    if (listen(serverSocket, SOMAXCONN) == SOCKET_ERROR) {
+        std::cerr << "Listen failed.\n";
+        closesocket(serverSocket);
+        WSACleanup();
+        return 1;
+    }
+    std::cout << "Server is listening on port " << PORT << "...\n";
 
     struct sockaddr_in clientAddress;
     SOCKET clientSocket;
     int clientAddressSize = sizeof(clientAddress);
-    char buffer[BUFFER_SIZE] = { 0 };
-
-
+    char buffer[BUFFER_SIZE] = { 0 }; //Inicializim me zero si fillim
 
 
     while (true) {
 
         clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddress, &clientAddressSize);
+
+        if (clientSocket == INVALID_SOCKET) {
+            continue; //Merri tjert
+        }
+
+        cout << "Client connected.\n";
 
         const char* welcome = "Welcome to the server! /\n";
 
@@ -77,16 +91,17 @@ int main() {
 
         int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE - 1, 0);
 
-        if (bytesReceived != SOCKET_ERROR) {
-
-            buffer[bytesReceived] = '\0'; //i hjek nulls
+        if (bytesReceived > 0) {
+            buffer[bytesReceived] = '\0'; // Mi hjek zerot me lan veq mesazhin
+            cout << "Received from client: " << buffer << endl;
         }
-
-        //cout << "From client: " << buffer << endl;
-
+        else if (bytesReceived == 0) {
+            cout << "Client disconnected.\n";
+        }
+       
 
         closesocket(clientSocket);
-        //cout << "Client disconnected \n";
+        
 
     }
 
