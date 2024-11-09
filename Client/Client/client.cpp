@@ -2,6 +2,11 @@
 #include <winsock2.h>
 #include <cstring>
 #include <ws2tcpip.h>
+#include <vector>
+#include <fstream>
+#include <direct.h>
+#include <thread>
+
 
 #pragma comment(lib, "Ws2_32.lib")
 
@@ -9,14 +14,33 @@ using namespace std;
 
 enum Privileges { FULL_ACCESS, READ_ONLY };
 
-// Struktura për të mbajtur informacionin e klientëve dhe privilegjet
+// Struktura per te mbajtur informacionin e klientev dhe privilegjet
 struct ClientInfo {
     SOCKET sock;
     Privileges privilege;
 };
 
-// Lista e klientëve të lidhur
+// Lista e klienteve qe jane lidh
 vector<ClientInfo> clients;
+
+// Funksioni qe e trajton secilin klient sipas privilegjeve
+void handleClient(ClientInfo client) {
+    char buffer[1024];
+    int bytesReceived;
+
+    while (true) {
+        // Prano kërkesën e klientit
+        bytesReceived = recv(client.sock, buffer, sizeof(buffer) - 1, 0);
+        if (bytesReceived <= 0) {
+            cout << "Client disconnected." << endl;
+            closesocket(client.sock);
+            break;
+        }
+
+        buffer[bytesReceived] = '\0';
+        string request(buffer);
+
+
 
 int main2() {
     WSADATA wsaData;
