@@ -1,7 +1,7 @@
 #include <iostream>
 #include <winsock2.h>
 #include <ws2tcpip.h>
-
+#include <queue>
 
 #pragma comment(lib, "Ws2_32.lib")
 
@@ -11,6 +11,8 @@ using namespace std;
 #define PORT 8080
 
 #define BUFFER_SIZE 1024
+
+#define MAX_CONNECTED 3
 
 
 int main() {
@@ -58,7 +60,7 @@ int main() {
 
 
     //Listen serveri
-    if (listen(serverSocket, SOMAXCONN) == SOCKET_ERROR) {
+    if (listen(serverSocket, MAX_CONNECTED) == SOCKET_ERROR) {
         std::cerr << "Listen failed.\n";
         closesocket(serverSocket);
         WSACleanup();
@@ -66,19 +68,40 @@ int main() {
     }
     std::cout << "Server is listening on port " << PORT << "...\n";
 
+
+
     struct sockaddr_in clientAddress;
     SOCKET clientSocket;
     int clientAddressSize = sizeof(clientAddress);
     char buffer[BUFFER_SIZE] = { 0 }; //Inicializim me zero si fillim
 
 
+
+
+    int activeClientCounter = 0;
+
+
+
     while (true) {
+
+
+
+        if (activeClientCounter == MAX_CONNECTED) {
+            cout << "Maximum number of clients have been reached. Please wait for your turn... " << endl;
+
+            continue;
+        }
+
+
+
 
         clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddress, &clientAddressSize);
 
         if (clientSocket == INVALID_SOCKET) {
             continue; //Merri tjert
         }
+
+        activeClientCounter++;
 
         cout << "Client connected.\n";
 
