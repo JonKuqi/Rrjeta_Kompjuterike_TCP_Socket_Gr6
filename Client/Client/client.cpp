@@ -7,7 +7,7 @@
 
 using namespace std;
 
-int main() {
+int main2() {
     WSADATA wsaData;
     SOCKET sock = INVALID_SOCKET;
     struct sockaddr_in server_addr;

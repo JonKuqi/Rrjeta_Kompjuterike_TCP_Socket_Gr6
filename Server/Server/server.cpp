@@ -1,7 +1,12 @@
 #include <iostream>
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <thread>
+#include <vector>
+#include <mutex>
 #include <queue>
+#include <condition_variable>
+
 
 #pragma comment(lib, "Ws2_32.lib")
 
@@ -17,8 +22,12 @@ using namespace std;
 
 int activeClientCounter = 0;
 
-queue<SOCKET> clientQueue;
+queue<SOCKET> waitingClients;
 
+
+mutex clientMutex;
+
+condition_variable clientCondition;
 
 
 void handleClient(SOCKET clientSocket) {
@@ -28,42 +37,37 @@ void handleClient(SOCKET clientSocket) {
 
 
 
-
     //Nga klienti
     char buffer[BUFFER_SIZE] = { 0 }; // E mushim me zero si fillim
 
-    int recievedBytes = recv(clientSocket, buffer, BUFFER_SIZE - 1, 0);
+    while (true) {
+        int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE - 1, 0);
 
- 
+        if (bytesReceived > 0) {
+            buffer[bytesReceived] = '\0';
+            cout << "Received from client: " << buffer << endl;
 
-    if (recievedBytes > 0) {
-        buffer[recievedBytes] = '\0'; // Ja hjek zerot e len veq mesazhin
 
-        cout << "Received from client: " << buffer << endl;
-     
+
+            send(clientSocket, buffer, bytesReceived, 0);
+        }
+        else {
+            break;
+        }
+
     }
-    else if (recievedBytes == 0) {
-        cout << "Client disconnected.\n";
-    }
-    else {
-        cerr << "Receive failed: \n";
-    }
-
 
     closesocket(clientSocket);
 
+    {
+        lock_guard<mutex> lock(clientMutex);  //lock_guard -> klase e mutexave
+        activeClientCounter--;
+
+    }
+    //E njofton kur te lirohet ni slot
+    clientCondition.notify_one();
+
 }
-
-
-void checkQueue() {
-
-}
-
-
-
-
-
-
 
 
 int main() {
@@ -137,9 +141,10 @@ int main() {
             continue; //Merri tjert
         }
 
-        activeClientCounter++;
 
-        cout << "Client connected.\n";
+
+
+        unique_lock<mutex> lock(clientMutex); // Locku per client
 
 
         if (activeClientCounter < MAX_CONNECTED) {
@@ -150,25 +155,35 @@ int main() {
 
 
             //E ban handle funksioni nalt
-            handleClient(clientSocket);
-
-            activeClientCounter--;
-
-            //MEsi e ka kry nja kqyr a ka ne queue tjer
-            checkQueue();
+            thread clientThread (handleClient, clientSocket);
+            clientThread.detach();
 
         }
         else {
             //E mushne queue
 
             cout << "Max client number reached, adding to the queue. \n";
-            clientQueue.push(clientSocket);
+            waitingClients.push(clientSocket);
+            lock.unlock();
             
         }
 
+        // bane lock nese activeVlientCounter < MAX_CONNECTED
+        clientCondition.wait(lock, [] { return activeClientCounter < MAX_CONNECTED; });
 
-        closesocket(clientSocket);
-        
+        //Kqyr nese ka ne queue
+        if (!waitingClients.empty()) {
+            SOCKET clientInQueue = waitingClients.front();
+            waitingClients.pop();
+            activeClientCounter++;
+
+            cout << "Connecting queued client. Total clients: " << activeClientCounter << "\n";
+
+           
+            thread clientThread(handleClient, clientInQueue);
+            clientThread.detach();
+        }
+
 
     }
 
