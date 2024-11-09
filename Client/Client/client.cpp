@@ -6,6 +6,7 @@
 #include <fstream>
 #include <direct.h>
 #include <thread>
+#include <string>
 
 
 #pragma comment(lib, "Ws2_32.lib")
@@ -40,6 +41,19 @@ void handleClient(ClientInfo client) {
         buffer[bytesReceived] = '\0';
         string request(buffer);
 
+//Kontrollo privelegjet e klientit
+if (client.privilege == FULL_ACCESS) {
+            if (request.rfind("WRITE ", 0) == 0) { // Komanda WRITE
+                ofstream file("server_data.txt", ios::app);
+                if (file.is_open()) {
+                    file << request.substr(6) << endl;
+                    file.close();
+                    send(client.sock, "Data written successfully.\n", 26, 0);
+                }
+                else {
+                    send(client.sock, "Failed to write data.\n", 22, 0);
+                }
+            }
 
 
 int main2() {
