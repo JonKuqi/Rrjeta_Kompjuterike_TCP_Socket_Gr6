@@ -13,6 +13,15 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Source Files\ClientFiles">
+      <UniqueIdentifier>{bb26b148-2b7a-40c5-917e-afd240b01fd1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\ClientFiles\textFiles">
+      <UniqueIdentifier>{f4419516-8891-47f6-ab08-352c2bfdf785}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\ClientFiles\htmlFiles">
+      <UniqueIdentifier>{d23d1851-1c78-4e72-a696-62ffd5851fc1}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="server.cpp">
@@ -23,5 +32,16 @@
     <Text Include="server_log.log">
       <Filter>Source Files</Filter>
     </Text>
+    <Text Include="text_1.txt">
+      <Filter>Source Files\ClientFiles\textFiles</Filter>
+    </Text>
+    <Text Include="text_2.txt">
+      <Filter>Source Files\ClientFiles\textFiles</Filter>
+    </Text>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="index.html">
+      <Filter>Source Files\ClientFiles\htmlFiles</Filter>
+    </None>
   </ItemGroup>
 </Project>

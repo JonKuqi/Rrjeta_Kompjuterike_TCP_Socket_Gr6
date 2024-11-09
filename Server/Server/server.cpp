@@ -8,17 +8,77 @@
 #include <ctime>
 #include <queue>
 #include <string>
+#include <filesystem>
+#include <unordered_map>
+#include <fstream>
+#include <windows.h>
+#include <sstream>
+
 
 #pragma comment(lib, "Ws2_32.lib")
 
 using namespace std;
 
-#define SERVER_NAME = ''
+#define SERVER_NAME ''
+
 #define PORT 8080
 
 #define BUFFER_SIZE 1024
 
 #define MAX_CONNECTED 3
+
+#define TIMEOUT_SECONDS 30  //Ne sekonda
+
+
+
+std::string ListFilesInDirectory(const std::string& folderPath) {
+    std::stringstream output;
+
+    // Construct the search pattern
+    std::string searchPath = folderPath + "\\*";
+    WIN32_FIND_DATAA findData;
+    HANDLE hFind = FindFirstFileA(searchPath.c_str(), &findData);
+
+    if (hFind == INVALID_HANDLE_VALUE) {
+        return "Error: Unable to open directory " + folderPath + "\n";
+    }
+
+    output << "Listing files in: " << folderPath << "\n";
+
+    do {
+        const char* name = findData.cFileName;
+
+        // Skip "." and ".." entries
+        if (strcmp(name, ".") != 0 && strcmp(name, "..") != 0) {
+            // Check if it's a directory
+            if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+                output << "[Folder] " << name << endl;
+            }
+            else {
+                output << "[File]   " << name << endl;
+            }
+        }
+    } while (FindNextFileA(hFind, &findData) != 0);
+
+    FindClose(hFind);
+
+    return output.str();
+}
+
+
+// si explode() ne php
+std::vector<std::string> splitTheString(const std::string& str) {
+    std::vector<std::string> result;
+    std::stringstream ss(str);
+    std::string word;
+    while (ss >> word) {
+        result.push_back(word);
+    }
+    return result;
+}
+
+
+
 
 
 int activeClientCounter = 0;
@@ -31,6 +91,7 @@ mutex clientMutex;
 condition_variable clientCondition;
 
 
+SOCKET fullAccessClient = INVALID_SOCKET;
 
 
 
@@ -60,11 +121,61 @@ string getCurrentTime() {
 }
 
 
+void setSocketTimeout(SOCKET socket) {
+    int timeout = TIMEOUT_SECONDS * 1000;  // Convert to milliseconds
+    setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+}
+
+
+
+string readFile(const string& path) {
+    ifstream file(path);
+
+    if (!file.is_open()) {
+  
+        return "Not Found"; 
+    }
+
+    stringstream buffer;
+    buffer << file.rdbuf();
+
+    file.close(); 
+    return buffer.str(); 
+}
+
+bool writeToFile(string path, string text, bool append) {
+    if (append) {
+        ofstream outfile(path, ios::app);
+        if (outfile.is_open()) {
+            outfile << text;
+            outfile.close();
+        }
+        else {
+            return false;
+        }
+    }
+    else {
+        ofstream outfile(path);
+        if (outfile.is_open()) {
+            outfile << text;
+            outfile.close();
+        }
+        else {
+            return false;
+        }
+    }
+    return true;
+}
+
+
+
+
 void handleClient(SOCKET clientSocket, sockaddr_in clientAddr) {
 
-    const char* welcomeMessage = "Welcome ... \n";
 
-    send(clientSocket, welcomeMessage, strlen(welcomeMessage), 0);
+
+    //Clienti ne timeOut
+    setSocketTimeout(clientSocket);
 
     char clientIP[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &(clientAddr.sin_addr), clientIP, INET_ADDRSTRLEN);
@@ -80,7 +191,36 @@ void handleClient(SOCKET clientSocket, sockaddr_in clientAddr) {
     //Nga klienti
     char buffer[BUFFER_SIZE] = { 0 }; // E mushim me zero si fillim
 
+
+    bool isFullAccess = (clientSocket == fullAccessClient);
+    
+    const char* welcomeMessage = "Welcome ... \n ";
+ 
+ 
+    send(clientSocket, welcomeMessage, strlen(welcomeMessage), 0);
+
+
+    //PATH
+    string path = "ClientFiles/";
+
+    const char* message;
+    if (isFullAccess) {
+        message = "You have Full Access! \n Commands:  read filename | write filename text | append filename text\n up  (goes up in path folder) | down (goes down in path folder) | execute (Stop Server)\n\n You are in this directory: \n";
+
+    }
+    else {
+        message = "You have limited Asccess! \n Commands:  read filename | up  (goes up in path folder) | down folder(goes down in path folder)\n\n You are in this directory: \n";
+    }
+    send(clientSocket, message, strlen(message), 0);
+
     while (true) {
+
+        string direct = ListFilesInDirectory(path);
+        direct += "\n ______________________\n";
+        const char* message2 = direct.c_str();
+
+        send(clientSocket, message2, strlen(message2), 0);
+        
         int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE - 1, 0);
 
         if (bytesReceived > 0) {
@@ -90,7 +230,61 @@ void handleClient(SOCKET clientSocket, sockaddr_in clientAddr) {
             //Log mesazhet e klientit
             log("Message from IP " + string(clientIP) + " at " + getCurrentTime() + ": " + buffer);
 
-            send(clientSocket, buffer, bytesReceived, 0);
+            string recievedString(buffer);
+
+
+            vector<string> words = splitTheString(recievedString);
+
+
+            const char* response;
+
+            if (words[0] == "read") {
+                string fromFile = readFile(path + words[1]);
+                if (fromFile == "Not Found") {
+                    response = "Incorrect path.";
+                }
+                else {
+                    response = fromFile.c_str();
+                }
+            }
+            else if (words[0] == "write" && isFullAccess) {
+                string toWrite = "";
+                for (int i = 2; i < words.size(); i++ ) {
+                    toWrite += words[i] += " ";
+                }
+                if (writeToFile(path + words[1], toWrite, false)) {
+                    response = "Write Successful! \n";
+                }
+                else {
+                    response = "Write NOT Successful! \n";
+                }
+            }
+            else if (words[0] == "append" && isFullAccess) {
+                string toWrite = "";
+                for (int i = 2; i < words.size(); i++) {
+                    toWrite += words[i] += " ";
+                }
+                if (writeToFile(path + words[1], toWrite, true)) {
+                    response = "Write Successful! \n";
+                }
+                else {
+                    response = "Write NOT Successful! \n";
+                }
+            }
+            else if (words[0] == "up") {
+                path = "ClientFiles/";
+            }
+            else if (words[0] == "down") {
+                path += words[1] + "/";
+            }
+            else if (words[0] == "execute" && isFullAccess) {
+
+            }
+            else {
+                response = "Invalid Comand. Try again";
+                send(clientSocket, response, strlen(response), 0);
+            }
+     
         }
         else {
             break;
@@ -113,6 +307,9 @@ void handleClient(SOCKET clientSocket, sockaddr_in clientAddr) {
 
 }
 
+
+
+void testFunction();
 
 int main() {
 
@@ -235,3 +432,7 @@ int main() {
     WSACleanup();
     return 0;
 }
+
+
+
+
