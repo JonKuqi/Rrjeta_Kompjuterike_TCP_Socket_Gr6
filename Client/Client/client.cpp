@@ -7,6 +7,17 @@
 
 using namespace std;
 
+enum Privileges { FULL_ACCESS, READ_ONLY };
+
+// Struktura për të mbajtur informacionin e klientëve dhe privilegjet
+struct ClientInfo {
+    SOCKET sock;
+    Privileges privilege;
+};
+
+// Lista e klientëve të lidhur
+vector<ClientInfo> clients;
+
 int main2() {
     WSADATA wsaData;
     SOCKET sock = INVALID_SOCKET;
