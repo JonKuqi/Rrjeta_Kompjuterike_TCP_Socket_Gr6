@@ -34,7 +34,7 @@ bool connectToServer(SOCKET& clientSocket, sockaddr_in& serverAddress) {
 
 
 int main() {
-    
+
 
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
@@ -50,12 +50,12 @@ int main() {
         return 1;
     }
 
-    
+
     sockaddr_in serverAddress;
     serverAddress.sin_family = AF_INET;
     serverAddress.sin_port = htons(PORT);
 
- 
+
 
     if (inet_pton(AF_INET, SERVER_IP, &serverAddress.sin_addr) <= 0) {
         cerr << "Invalid IP address format: " << SERVER_IP << "\n";
@@ -88,7 +88,7 @@ int main() {
 
     while (true) {
 
-      
+
         getline(cin, userInput);
 
         if (userInput == "exit") {
@@ -123,18 +123,18 @@ int main() {
             else {
                 cerr << "You have been time out \n" << WSAGetLastError() << "\n";
                 closesocket(clientSocket);
-                if (!connectToServer(clientSocket, serverAddress)){
+                if (!connectToServer(clientSocket, serverAddress)) {
                     cerr << "Connection to server failed! Error: " << WSAGetLastError() << "\n";
                     closesocket(clientSocket);
                     WSACleanup();
                     return 1;
                 }
                 cout << "Reconnected to the Server!\n";
-               
+
             }
         }
 
-       
+
     }
 
 

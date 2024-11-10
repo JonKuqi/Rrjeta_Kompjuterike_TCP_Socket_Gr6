@@ -27,7 +27,32 @@ using namespace std;
 
 #define MAX_CONNECTED 3
 
-#define TIMEOUT_SECONDS 300  //Ne sekonda
+#define TIMEOUT_SECONDS 5  //Ne sekonda
+
+
+int activeClientCounter = 0;
+
+queue<SOCKET> waitingClients;
+
+
+mutex clientMutex;
+
+condition_variable clientCondition;
+
+
+string fullAccessClientIp = "";
+
+
+
+struct ClientInfo {
+    sockaddr_in addr;
+    bool wasQueued;
+};
+
+queue<ClientInfo> reconnectQueue;
+mutex reconnectMutex;
+
+
 
 
 
@@ -76,33 +101,6 @@ std::vector<std::string> splitTheString(const std::string& str) {
     }
     return result;
 }
-
-
-
-
-
-int activeClientCounter = 0;
-
-queue<SOCKET> waitingClients;
-
-
-mutex clientMutex;
-
-condition_variable clientCondition;
-
-
-SOCKET fullAccessClient = INVALID_SOCKET;
-
-struct ClientInfo {
-    sockaddr_in addr;
-    bool wasQueued;
-};
-
-queue<ClientInfo> reconnectQueue;
-mutex reconnectMutex;
-
-
-
 
 
 
@@ -213,11 +211,9 @@ void handleClient(SOCKET clientSocket, sockaddr_in clientAddr, bool wasQueued) {
     char buffer[BUFFER_SIZE] = { 0 }; // E mushim me zero si fillim
 
 
-    bool isFullAccess = (clientSocket == fullAccessClient);
+ 
     
-   
-
-    isFullAccess = true;
+    bool isFullAccess = (string(clientIP) == fullAccessClientIp);
     
    
     //PATH
