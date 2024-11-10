@@ -2,10 +2,86 @@
 #include <winsock2.h>
 #include <cstring>
 #include <ws2tcpip.h>
+#include <vector>
+#include <fstream>
+#include <direct.h>
+#include <thread>
+#include <string>
+
 
 #pragma comment(lib, "Ws2_32.lib")
 
 using namespace std;
+
+enum Privileges { FULL_ACCESS, READ_ONLY };
+
+// Struktura per te mbajtur informacionin e klientev dhe privilegjet
+struct ClientInfo {
+    SOCKET sock;
+    Privileges privilege;
+};
+
+// Lista e klienteve qe jane lidh
+vector<ClientInfo> clients;
+
+// Funksioni qe e trajton secilin klient sipas privilegjeve
+void handleClient(ClientInfo client) {
+    char buffer[1024];
+    int bytesReceived;
+
+    while (true) {
+        // Prano kërkesën e klientit
+        bytesReceived = recv(client.sock, buffer, sizeof(buffer) - 1, 0);
+        if (bytesReceived <= 0) {
+            cout << "Client disconnected." << endl;
+            closesocket(client.sock);
+            break;
+        }
+
+        buffer[bytesReceived] = '\0';
+        string request(buffer);
+
+//Kontrollo privelegjet e klientit
+if (client.privilege == FULL_ACCESS) {
+            if (request.rfind("WRITE ", 0) == 0) { // Komanda WRITE
+                ofstream file("server_data.txt", ios::app);
+                if (file.is_open()) {
+                    file << request.substr(6) << endl;
+                    file.close();
+                    send(client.sock, "Data written successfully.\n", 26, 0);
+                }
+                else {
+                    send(client.sock, "Failed to write data.\n", 22, 0);
+                }
+            } else if (request == "READ") { // Komanda READ
+                ifstream file("server_data.txt");
+                string line, response;
+                while (getline(file, line)) {
+                    response += line + "\n";
+                }
+                send(client.sock, response.c_str(), response.length(), 0);
+            }
+else if (request.rfind("EXECUTE ", 0) == 0) { // Komanda EXECUTE
+                string command = request.substr(8);
+                system(command.c_str()); 
+                send(client.sock, "Command executed.\n", 18, 0);
+            } else {
+                send(client.sock, "Invalid command.\n", 17, 0);
+            }
+        } else if (client.privilege == READ_ONLY) {
+            if (request == "READ") {
+                ifstream file("server_data.txt");
+                string line, response;
+                while (getline(file, line)) {
+                    response += line + "\n";
+                }
+                send(client.sock, response.c_str(), response.length(), 0);
+            } else {
+                send(client.sock, "Permission denied.\n", 19, 0);
+            }
+        }
+    }
+}
 
 int main2() {
     WSADATA wsaData;
