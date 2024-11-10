@@ -220,6 +220,7 @@ void handleClient(SOCKET clientSocket, sockaddr_in clientAddr) {
  
     send(clientSocket, welcomeMessage, strlen(welcomeMessage), 0);
 
+    isFullAccess = true;
 
     //PATH
     string path = "ClientFiles/";
@@ -249,10 +250,15 @@ void handleClient(SOCKET clientSocket, sockaddr_in clientAddr) {
     send(clientSocket, message2, strlen(message2), 0);
 
 
+
     while (true) {
 
+        //Fshije n buffer qka ka
+        memset(buffer, 0, BUFFER_SIZE);
         
         int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE - 1, 0);
+        //Wait 50 milisekonda
+        //this_thread::sleep_for(chrono::milliseconds(50));
 
         if (bytesReceived > 0) {
             buffer[bytesReceived] = '\0';
@@ -268,7 +274,8 @@ void handleClient(SOCKET clientSocket, sockaddr_in clientAddr) {
 
 
 
-            string response; 
+            string response = "";
+
             if (words[0] == "read") {
                 string fromFile = readFile(path + words[1]);
                 if (fromFile == "Not Found") {
@@ -318,12 +325,15 @@ void handleClient(SOCKET clientSocket, sockaddr_in clientAddr) {
             }
             else if (words[0] == "execute" && isFullAccess) {
 
+
+
             }
             else {
                 response = "Invalid Command. Try again.";
             }
-            send(clientSocket, response.c_str(), response.length(), 0);
-  
+            if (!response.empty()) {
+                send(clientSocket, response.c_str(), response.length(), 0);
+            }
         }
         else {
             break;

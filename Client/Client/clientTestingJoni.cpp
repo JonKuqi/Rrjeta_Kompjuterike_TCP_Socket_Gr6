@@ -12,14 +12,15 @@ using namespace std;
 #define BUFFER_SIZE 1024
 
 int main() {
-    // Initialize WinSock
+    
+
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
         cerr << "WSAStartup failed.\n";
         return 1;
     }
 
-    // Create a socket
+
     SOCKET clientSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (clientSocket == INVALID_SOCKET) {
         cerr << "Socket creation failed!\n";
@@ -27,12 +28,13 @@ int main() {
         return 1;
     }
 
-    // Define server address
+    
     sockaddr_in serverAddress;
     serverAddress.sin_family = AF_INET;
     serverAddress.sin_port = htons(PORT);
 
-    // Convert IP address to binary format and check for errors
+ 
+
     if (inet_pton(AF_INET, SERVER_IP, &serverAddress.sin_addr) <= 0) {
         cerr << "Invalid IP address format: " << SERVER_IP << "\n";
         closesocket(clientSocket);
@@ -57,21 +59,8 @@ int main() {
 
     while (true) {
 
-        int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE - 1, 0);
-        if (bytesReceived > 0) {
-            buffer[bytesReceived] = '\0'; // Null-terminate the received data
-            cout << "Server: " << buffer << endl;
-        }
-        else if (bytesReceived == 0) {
-            cout << "Server disconnected.\n";
-            break;
-        }
-        else {
-            cerr << "Receive failed: " << WSAGetLastError() << "\n";
-            break;
-        }
-
-
+       
+        
         getline(cin, userInput);
 
         if (userInput == "exit") {
@@ -83,10 +72,27 @@ int main() {
         int sendResult = send(clientSocket, userInput.c_str(), userInput.length(), 0);
         if (sendResult == SOCKET_ERROR) {
             cerr << "Send failed: " << WSAGetLastError() << "\n";
-            break;
+        }
+        else {
+            // Add a small delay after sending the command to the server
+            Sleep(50); // Delay of 50 milliseconds
+
+            memset(buffer, 0, BUFFER_SIZE); // Clear the buffer before receiving
+            int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE - 1, 0);
+            if (bytesReceived > 0) {
+                buffer[bytesReceived] = '\0'; // Null-terminate the received data
+                cout << "Server: " << buffer << endl;
+            }
+            else if (bytesReceived == 0) {
+                cout << "Server disconnected.\n";
+                break;
+            }
+            else {
+                cerr << "Receive failed: " << WSAGetLastError() << "\n";
+                break;
+            }
         }
 
-  
        
     }
 
