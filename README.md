@@ -1,9 +1,9 @@
-## Lidhja TCP Server Client - Rrjeta Kompjuterike
+# Lidhja TCP Server Client ne c++ - Rrjeta Kompjuterike
 
-# Grupi 6
+### Grupi 6
 
 
-# Serveri mundeson:
+### Serveri mundeson:
 
  - Lidhjen e shume klienteve dhe trajtimi permes threads
  - Dallimi i userave me full permissin
@@ -12,7 +12,7 @@
  - Ne queue kane prioritet klientat me full Permission
    
 
-  # Punuan:
+### Punuan:
    - Jon Kuçi
    - Hekuran Kokolli
    - Isma Klinaku
