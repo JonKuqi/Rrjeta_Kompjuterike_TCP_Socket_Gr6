@@ -53,8 +53,14 @@ if (client.privilege == FULL_ACCESS) {
                 else {
                     send(client.sock, "Failed to write data.\n", 22, 0);
                 }
+            } else if (request == "READ") { // Komanda READ
+                ifstream file("server_data.txt");
+                string line, response;
+                while (getline(file, line)) {
+                    response += line + "\n";
+                }
+                send(client.sock, response.c_str(), response.length(), 0);
             }
-
 
 int main2() {
     WSADATA wsaData;
