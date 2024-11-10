@@ -6,6 +6,7 @@
 #include <vector>
 #include <mutex>
 #include <ctime>
+#include <deque>
 #include <queue>
 #include <string>
 #include <filesystem>
@@ -31,8 +32,9 @@ using namespace std;
 
 
 int activeClientCounter = 0;
+int clientsInQueue = 0;
 
-queue<SOCKET> waitingClients;
+deque<SOCKET> waitingClients;
 
 
 mutex clientMutex;
@@ -53,7 +55,7 @@ queue<ClientInfo> reconnectQueue;
 mutex reconnectMutex;
 
 
-
+volatile bool serverShutdownRequested = false;
 
 
 std::string ListFilesInDirectory(const std::string& folderPath) {
@@ -219,7 +221,7 @@ void handleClient(SOCKET clientSocket, sockaddr_in clientAddr, bool wasQueued) {
 
     if (isFullAccess) {
         if(wasQueued){
-            welcome = "You are now connected, sorry for the wait!\nYou have Full Access! \n\n Commands:  read filename | write filename text | append filename text\n up  (goes up in path folder) | down (goes down in path folder) | execute (Stop Server)\n\n You are in this directory: \n" + direct;
+            welcome = "You are now connected, sorry for the wait!\nYou have Full Access! \n\n Commands:  read filename | write filename text | append filename text\n up  (goes up in path folder) | down (goes down in path folder) | execute Stop Server\n\n You are in this directory: \n" + direct;
         }
         else {
             welcome = "You have Full Access! \n\n Commands:  read filename | write filename text | append filename text\n up  (goes up in path folder) | down (goes down in path folder) | execute (Stop Server)\n\n You are in this directory: \n" + direct;
@@ -229,7 +231,7 @@ void handleClient(SOCKET clientSocket, sockaddr_in clientAddr, bool wasQueued) {
     }
     else {
         if (wasQueued) {
-            welcome = "You are now connected, sorry for the wait!\You have limited Access! \n\n Commands:  read filename | up  (goes up in path folder) | down folder(goes down in path folder)\n\n You are in this directory: \n" + direct;
+            welcome = "You are now connected, sorry for the wait!\You have limited Access! \n\n Commands:  read filename | up  (goes up in path folder) | down folder(goes down in path folder) | execute StopServer\n\n You are in this directory: \n" + direct;
         }
         else {
             welcome = "You have limited Access! \n\n Commands:  read filename | up  (goes up in path folder) | down folder(goes down in path folder)\n\n You are in this directory: \n" + direct;
@@ -311,10 +313,14 @@ void handleClient(SOCKET clientSocket, sockaddr_in clientAddr, bool wasQueued) {
                 direct += "\n ______________________\n";
                 send(clientSocket, direct.c_str(), direct.length(), 0);
             }
-            else if (words[0] == "execute" && isFullAccess) {
-
-
-
+            else if (words[0] == "execute" && isFullAccess && words[1] == "StopServer") {
+                response = "Server shutdown initiated by client.";
+                send(clientSocket, response.c_str(), response.length(), 0);
+                log("Server shutdown command received from IP " + string(clientIP));
+                serverShutdownRequested = true; 
+                closesocket(clientSocket);  
+                cout << "Shutting down server as requested by a client.\n";
+                break;  
             }
             else {
                 response = "Invalid Command. Try again.";
@@ -339,6 +345,14 @@ void handleClient(SOCKET clientSocket, sockaddr_in clientAddr, bool wasQueued) {
         }
         else {
             cerr << "Receive error for client IP = " << clientIP << ", Port = " << clientPort << endl;
+            log("Client disconnected: IP = " + string(clientIP) + ", Port = " + to_string(clientPort) + ", Time = " + getCurrentTime());
+            closesocket(clientSocket);
+
+            lock_guard<mutex> lock(clientMutex);  //lock_guard -> klase e mutexave
+            activeClientCounter--;
+
+            //E njofton kur te lirohet ni slot
+            clientCondition.notify_one();
             break;
         }
 
@@ -462,6 +476,13 @@ int main() {
 
 
     while (true) {
+        if (serverShutdownRequested) {
+            cout << "Shutting down server as requested by a client.\n";
+            break;
+        }
+
+
+
         struct sockaddr_in clientAddress;
         int clientAddressSize = sizeof(clientAddress);
         SOCKET clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddress, &clientAddressSize);
@@ -475,11 +496,10 @@ int main() {
 
         unique_lock<mutex> lock(clientMutex); // Locku per client
 
-
-        if (activeClientCounter < MAX_CONNECTED) {
+        
+        if (activeClientCounter < MAX_CONNECTED - 1) {
 
             activeClientCounter++;
-
             cout << "New client processing. Active client: " << activeClientCounter<<endl;
 
 
@@ -489,25 +509,47 @@ int main() {
 
         }
         else {
+
+            clientsInQueue++;
             //E mushne queue
 
-            cout << "Max client number reached, adding to the queue. \n";
-            const char* message = "Please wait till server is free!\n";
+            cout << "Max client number reached, adding to the queue. Number of clients in queue: " << clientsInQueue << endl;
+
+            const char* message = "\nPlease wait till server is free!\n";
 
             send(clientSocket, message, strlen(message), 0);
 
-            waitingClients.push(clientSocket);
+            char clientIP[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, &(clientAddress.sin_addr), clientIP, INET_ADDRSTRLEN);
+
+
+            //PRIORITETI ne DEQUEUE
+            if (string(clientIP) == fullAccessClientIp) {
+                waitingClients.push_front(clientSocket);
+                cout << "Client waiting with full permission!"<<endl;
+            }
+            else {
+                waitingClients.push_back(clientSocket);
+                cout << "Client waiting NO full permission!"<<endl;
+            }
+
             lock.unlock();
-            
         }
+
+        
 
         // bane lock nese activeVlientCounter < MAX_CONNECTED
         clientCondition.wait(lock, [] { return activeClientCounter < MAX_CONNECTED; });
 
+
         //Kqyr nese ka ne queue
         if (!waitingClients.empty()) {
+         
+
             SOCKET queuedClient = waitingClients.front();
-            waitingClients.pop();
+            waitingClients.pop_front();
+
+
             activeClientCounter++;
 
             cout << "Connecting queued client. Active clients: " << activeClientCounter << "\n";
@@ -516,6 +558,9 @@ int main() {
             thread clientThread(handleClient, queuedClient, clientAddress, true);
 
             clientThread.detach();
+        }
+        else {
+            cout << "IT IS EMPTYYYYYYYYYYY";
         }
 
 
