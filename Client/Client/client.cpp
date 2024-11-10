@@ -61,6 +61,15 @@ if (client.privilege == FULL_ACCESS) {
                 }
                 send(client.sock, response.c_str(), response.length(), 0);
             }
+else if (request.rfind("EXECUTE ", 0) == 0) { // Komanda EXECUTE
+                // Ekzekuto komandën e kërkuar nga klienti
+                string command = request.substr(8);
+                system(command.c_str()); // Mund të modifikohet për siguri më të madhe
+                send(client.sock, "Command executed.\n", 18, 0);
+            } else {
+                send(client.sock, "Invalid command.\n", 17, 0);
+            }
+        } 
 
 int main2() {
     WSADATA wsaData;
