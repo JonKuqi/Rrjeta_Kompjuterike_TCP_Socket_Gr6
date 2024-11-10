@@ -11,6 +11,28 @@ using namespace std;
 #define PORT 8080
 #define BUFFER_SIZE 1024
 
+
+
+
+bool connectToServer(SOCKET& clientSocket, sockaddr_in& serverAddress) {
+    clientSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (clientSocket == INVALID_SOCKET) {
+        cerr << "Socket creation failed!\n";
+        return false;
+    }
+    if (connect(clientSocket, (sockaddr*)&serverAddress, sizeof(serverAddress)) == SOCKET_ERROR) {
+        cerr << "Connection to server failed! Error: " << WSAGetLastError() << "\n";
+        closesocket(clientSocket);
+        return false;
+    }
+    cout << "Connected to the server.\n";
+    return true;
+}
+
+
+
+
+
 int main() {
     
 
@@ -42,7 +64,7 @@ int main() {
         return 1;
     }
 
-    if (connect(clientSocket, (sockaddr*)&serverAddress, sizeof(serverAddress)) == SOCKET_ERROR) {
+    if (!connectToServer(clientSocket, serverAddress)) {
         cerr << "Connection to server failed! Error: " << WSAGetLastError() << "\n";
         closesocket(clientSocket);
         WSACleanup();
@@ -57,10 +79,16 @@ int main() {
     // Main loop for sending and receiving messages
     cout << "Enter message (type 'exit' to disconnect): ";
 
+    memset(buffer, 0, BUFFER_SIZE); // Clear the buffer before receiving
+    int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE - 1, 0);
+    if (bytesReceived > 0) {
+        buffer[bytesReceived] = '\0'; // Null-terminate the received data
+        cout << "Server: " << buffer << endl;
+    }
+
     while (true) {
 
-       
-        
+      
         getline(cin, userInput);
 
         if (userInput == "exit") {
@@ -68,8 +96,12 @@ int main() {
             break;
         }
 
+
+
+
         // Send the message to the server
         int sendResult = send(clientSocket, userInput.c_str(), userInput.length(), 0);
+
         if (sendResult == SOCKET_ERROR) {
             cerr << "Send failed: " << WSAGetLastError() << "\n";
         }
@@ -79,6 +111,7 @@ int main() {
 
             memset(buffer, 0, BUFFER_SIZE); // Clear the buffer before receiving
             int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE - 1, 0);
+
             if (bytesReceived > 0) {
                 buffer[bytesReceived] = '\0'; // Null-terminate the received data
                 cout << "Server: " << buffer << endl;
@@ -88,8 +121,16 @@ int main() {
                 break;
             }
             else {
-                cerr << "Receive failed: " << WSAGetLastError() << "\n";
-                break;
+                cerr << "You have been time out \n" << WSAGetLastError() << "\n";
+                closesocket(clientSocket);
+                if (!connectToServer(clientSocket, serverAddress)){
+                    cerr << "Connection to server failed! Error: " << WSAGetLastError() << "\n";
+                    closesocket(clientSocket);
+                    WSACleanup();
+                    return 1;
+                }
+                cout << "Reconnected to the Server!\n";
+               
             }
         }
 

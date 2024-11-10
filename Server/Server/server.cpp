@@ -19,7 +19,7 @@
 
 using namespace std;
 
-#define SERVER_NAME ''
+#define SERVER_NAME ""
 
 #define PORT 8080
 
@@ -27,7 +27,7 @@ using namespace std;
 
 #define MAX_CONNECTED 3
 
-#define TIMEOUT_SECONDS 30  //Ne sekonda
+#define TIMEOUT_SECONDS 300  //Ne sekonda
 
 
 
@@ -92,6 +92,19 @@ condition_variable clientCondition;
 
 
 SOCKET fullAccessClient = INVALID_SOCKET;
+
+struct ClientInfo {
+    sockaddr_in addr;
+    bool wasQueued;
+};
+
+queue<ClientInfo> reconnectQueue;
+mutex reconnectMutex;
+
+
+
+
+
 
 
 
@@ -179,22 +192,9 @@ bool writeToFile(string path, string text, bool append) {
 
 
 
+void handleClient(SOCKET clientSocket, sockaddr_in clientAddr, bool wasQueued) {
 
-
-
-
-
-
-
-
-void handleClient(SOCKET clientSocket, sockaddr_in clientAddr) {
-    bool isQueued = false;
-    if (isQueued) {
-        const char* waitingMessage = "Server is busy. Please wait...\n";
-        send(clientSocket, waitingMessage, strlen(waitingMessage), 0);
-    }
-
-
+   
     //Clienti ne timeOut
     setSocketTimeout(clientSocket);
 
@@ -215,42 +215,44 @@ void handleClient(SOCKET clientSocket, sockaddr_in clientAddr) {
 
     bool isFullAccess = (clientSocket == fullAccessClient);
     
-    const char* welcomeMessage = "Welcome ... \n ";
- 
- 
-    send(clientSocket, welcomeMessage, strlen(welcomeMessage), 0);
+   
 
     isFullAccess = true;
-
+    
+   
     //PATH
     string path = "ClientFiles/";
 
-    const char* message;
-    if (isFullAccess) {
 
-        message = "You have Full Access! \n Commands:  read filename | write filename text | append filename text\n up  (goes up in path folder) | down (goes down in path folder) | execute (Stop Server)\n\n You are in this directory: \n";
+    string direct = "\n ______________________\n";
+    direct += ListFilesInDirectory(path);
+    direct += "\n ______________________\n";
+
+    const char* message;
+    string welcome;
+
+    if (isFullAccess) {
+        if(wasQueued){
+            welcome = "You are now connected, sorry for the wait!\nYou have Full Access! \n\n Commands:  read filename | write filename text | append filename text\n up  (goes up in path folder) | down (goes down in path folder) | execute (Stop Server)\n\n You are in this directory: \n" + direct;
+        }
+        else {
+            welcome = "You have Full Access! \n\n Commands:  read filename | write filename text | append filename text\n up  (goes up in path folder) | down (goes down in path folder) | execute (Stop Server)\n\n You are in this directory: \n" + direct;
+        }
+        
 
     }
     else {
-        message = "You have limited Asccess! \n Commands:  read filename | up  (goes up in path folder) | down folder(goes down in path folder)\n\n You are in this directory: \n";
+        if (wasQueued) {
+            welcome = "You are now connected, sorry for the wait!\You have limited Access! \n\n Commands:  read filename | up  (goes up in path folder) | down folder(goes down in path folder)\n\n You are in this directory: \n" + direct;
+        }
+        else {
+            welcome = "You have limited Access! \n\n Commands:  read filename | up  (goes up in path folder) | down folder(goes down in path folder)\n\n You are in this directory: \n" + direct;
+        }
     }
+    message = welcome.c_str();
     send(clientSocket, message, strlen(message), 0);
-
-
-
-
-
-    //CHANGE LATER
-    isFullAccess = true;
-
-
-    string direct = ListFilesInDirectory(path);
-    direct += "\n ______________________\n";
-    const char* message2 = direct.c_str();
-    send(clientSocket, message2, strlen(message2), 0);
-
-
-
+  
+    
     while (true) {
 
         //Fshije n buffer qka ka
@@ -335,7 +337,22 @@ void handleClient(SOCKET clientSocket, sockaddr_in clientAddr) {
                 send(clientSocket, response.c_str(), response.length(), 0);
             }
         }
+        else if (bytesReceived == 0 || WSAGetLastError() == WSAETIMEDOUT) {
+            // Client disconnected ose timed out
+            log("Client timed out: IP = " + string(clientIP) + ", Port = " + to_string(clientPort));
+            cout << "Client timed out: IP = " + string(clientIP) + ", Port = " + to_string(clientPort) << endl;
+            
+            {
+                lock_guard<mutex> lock(reconnectMutex);
+                reconnectQueue.push({ clientAddr, wasQueued });
+            }
+
+            closesocket(clientSocket);
+
+            break;
+        }
         else {
+            cerr << "Receive error for client IP = " << clientIP << ", Port = " << clientPort << endl;
             break;
         }
 
@@ -364,6 +381,32 @@ void handleClient(SOCKET clientSocket, sockaddr_in clientAddr) {
 
 
 
+
+void manageReconnections() {
+    while (true) {
+        this_thread::sleep_for(chrono::seconds(5));  // Adjust the frequency of checks
+
+        lock_guard<mutex> lock(clientMutex);
+        if (activeClientCounter < MAX_CONNECTED) {
+            lock_guard<mutex> reconnectLock(reconnectMutex);
+            if (!reconnectQueue.empty()) {
+                auto clientInfo = reconnectQueue.front();
+                reconnectQueue.pop();
+
+                // Try to accept a new connection from the same IP and port
+                SOCKET clientSocket = socket(AF_INET, SOCK_STREAM, 0);
+                if (clientSocket != INVALID_SOCKET && connect(clientSocket, (struct sockaddr*)&clientInfo.addr, sizeof(clientInfo.addr)) == 0) {
+                    activeClientCounter++;
+                    thread clientThread(handleClient, clientSocket, clientInfo.addr, true);
+                    clientThread.detach();
+                }
+                else {
+                    closesocket(clientSocket);
+                }
+            }
+        }
+    }
+}
 
 
 
@@ -424,6 +467,11 @@ int main() {
 
 
 
+
+
+    //Thread qe menagjon diconneccted
+    thread reconnectionThread(manageReconnections);
+    reconnectionThread.detach();
  
 
 
@@ -446,11 +494,11 @@ int main() {
 
             activeClientCounter++;
 
-            cout << "New client processing. Active clients" << activeClientCounter<<endl;
+            cout << "New client processing. Active client: " << activeClientCounter<<endl;
 
 
             //E ban handle funksioni nalt
-            thread clientThread (handleClient, clientSocket, clientAddress);
+            thread clientThread (handleClient, clientSocket, clientAddress, false);
             clientThread.detach();
 
         }
@@ -458,6 +506,10 @@ int main() {
             //E mushne queue
 
             cout << "Max client number reached, adding to the queue. \n";
+            const char* message = "Please wait till server is free!\n";
+
+            send(clientSocket, message, strlen(message), 0);
+
             waitingClients.push(clientSocket);
             lock.unlock();
             
@@ -473,7 +525,9 @@ int main() {
             activeClientCounter++;
 
             cout << "Connecting queued client. Active clients: " << activeClientCounter << "\n";
-            thread clientThread(handleClient, queuedClient, clientAddress);
+
+            
+            thread clientThread(handleClient, queuedClient, clientAddress, true);
 
             clientThread.detach();
         }
