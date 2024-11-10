@@ -7,7 +7,7 @@
 
 using namespace std;
 
-#define SERVER_IP "127.0.0.1" // Server IP address
+#define SERVER_IP "192.168.3.21" // Server IP address
 #define PORT 8080
 #define BUFFER_SIZE 1024
 

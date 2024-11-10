@@ -27,7 +27,7 @@ using namespace std;
 
 #define MAX_CONNECTED 3
 
-#define TIMEOUT_SECONDS 5  //Ne sekonda
+#define TIMEOUT_SECONDS 300  //Ne sekonda
 
 
 int activeClientCounter = 0;
@@ -40,7 +40,7 @@ mutex clientMutex;
 condition_variable clientCondition;
 
 
-string fullAccessClientIp = "";
+string fullAccessClientIp = "192.168.3.21";
 
 
 
@@ -182,14 +182,6 @@ bool writeToFile(string path, string text, bool append) {
 }
 
 
-
-
-
-
-
-
-
-
 void handleClient(SOCKET clientSocket, sockaddr_in clientAddr, bool wasQueued) {
 
    
@@ -210,8 +202,6 @@ void handleClient(SOCKET clientSocket, sockaddr_in clientAddr, bool wasQueued) {
     //Nga klienti
     char buffer[BUFFER_SIZE] = { 0 }; // E mushim me zero si fillim
 
-
- 
     
     bool isFullAccess = (string(clientIP) == fullAccessClientIp);
     
