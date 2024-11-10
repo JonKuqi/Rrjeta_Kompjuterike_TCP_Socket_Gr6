@@ -76,7 +76,7 @@ int main() {
     string userInput;
     char buffer[BUFFER_SIZE];
 
-    // Main loop for sending and receiving messages
+   
     cout << "Enter message (type 'exit' to disconnect): ";
 
     memset(buffer, 0, BUFFER_SIZE); // Clear the buffer before receiving
@@ -86,6 +86,8 @@ int main() {
         cout << "Server: " << buffer << endl;
     }
 
+
+    //Kryesorja
     while (true) {
 
 
@@ -99,21 +101,21 @@ int main() {
 
 
 
-        // Send the message to the server
+        // Dergo Mesazh
         int sendResult = send(clientSocket, userInput.c_str(), userInput.length(), 0);
 
         if (sendResult == SOCKET_ERROR) {
             cerr << "Send failed: " << WSAGetLastError() << "\n";
         }
         else {
-            // Add a small delay after sending the command to the server
+            // DELAY - Mos me qit prishet se ekzekuton ma shpejt se mun kthen serveri
             Sleep(50); // Delay of 50 milliseconds
 
-            memset(buffer, 0, BUFFER_SIZE); // Clear the buffer before receiving
+            memset(buffer, 0, BUFFER_SIZE); 
             int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE - 1, 0);
 
             if (bytesReceived > 0) {
-                buffer[bytesReceived] = '\0'; // Null-terminate the received data
+                buffer[bytesReceived] = '\0'; 
                 cout << "Server: " << buffer << endl;
             }
             else if (bytesReceived == 0) {
@@ -121,6 +123,7 @@ int main() {
                 break;
             }
             else {
+                //Rikonektohu nese ta ka ba timeOut
                 cerr << "You have been time out \n" << WSAGetLastError() << "\n";
                 closesocket(clientSocket);
                 if (!connectToServer(clientSocket, serverAddress)) {

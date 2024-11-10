@@ -67,11 +67,11 @@ mutex reconnectMutex;
 volatile bool serverShutdownRequested = false;
 
 
-std::string ListFilesInDirectory(const std::string& folderPath) {
-    std::stringstream output;
+string ListFilesInDirectory(const string& folderPath) {
+    stringstream output;
 
     // Construct the search pattern
-    std::string searchPath = folderPath + "\\*";
+    string searchPath = folderPath + "\\*";
     WIN32_FIND_DATAA findData;
     HANDLE hFind = FindFirstFileA(searchPath.c_str(), &findData);
 
@@ -323,7 +323,7 @@ void handleClient(SOCKET clientSocket, sockaddr_in clientAddr, bool wasQueued) {
                 send(clientSocket, direct.c_str(), direct.length(), 0);
             }
             else if (words[0] == "execute" && isFullAccess && words[1] == "StopServer") {
-                response = "Server shutdown initiated by client.";
+                response = "Server will shut down [Press any key to confirm]";
                 send(clientSocket, response.c_str(), response.length(), 0);
                 log("Server shutdown command received from IP " + string(clientIP));
                 serverShutdownRequested = true; 
