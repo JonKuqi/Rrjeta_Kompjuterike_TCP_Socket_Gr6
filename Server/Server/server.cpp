@@ -127,7 +127,6 @@ void setSocketTimeout(SOCKET socket) {
 }
 
 
-
 string readFile(const string& path) {
     ifstream file(path);
 
@@ -143,12 +142,15 @@ string readFile(const string& path) {
     return buffer.str(); 
 }
 
+
+
 bool writeToFile(string path, string text, bool append) {
     if (append) {
         ofstream outfile(path, ios::app);
         if (outfile.is_open()) {
             outfile << text;
             outfile.close();
+            return true;
         }
         else {
             return false;
@@ -159,6 +161,7 @@ bool writeToFile(string path, string text, bool append) {
         if (outfile.is_open()) {
             outfile << text;
             outfile.close();
+            return true;
         }
         else {
             return false;
@@ -170,8 +173,26 @@ bool writeToFile(string path, string text, bool append) {
 
 
 
-void handleClient(SOCKET clientSocket, sockaddr_in clientAddr) {
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+void handleClient(SOCKET clientSocket, sockaddr_in clientAddr) {
+    bool isQueued = false;
+    if (isQueued) {
+        const char* waitingMessage = "Server is busy. Please wait...\n";
+        send(clientSocket, waitingMessage, strlen(waitingMessage), 0);
+    }
 
 
     //Clienti ne timeOut
@@ -205,6 +226,7 @@ void handleClient(SOCKET clientSocket, sockaddr_in clientAddr) {
 
     const char* message;
     if (isFullAccess) {
+
         message = "You have Full Access! \n Commands:  read filename | write filename text | append filename text\n up  (goes up in path folder) | down (goes down in path folder) | execute (Stop Server)\n\n You are in this directory: \n";
 
     }
@@ -213,13 +235,22 @@ void handleClient(SOCKET clientSocket, sockaddr_in clientAddr) {
     }
     send(clientSocket, message, strlen(message), 0);
 
+
+
+
+
+    //CHANGE LATER
+    isFullAccess = true;
+
+
+    string direct = ListFilesInDirectory(path);
+    direct += "\n ______________________\n";
+    const char* message2 = direct.c_str();
+    send(clientSocket, message2, strlen(message2), 0);
+
+
     while (true) {
 
-        string direct = ListFilesInDirectory(path);
-        direct += "\n ______________________\n";
-        const char* message2 = direct.c_str();
-
-        send(clientSocket, message2, strlen(message2), 0);
         
         int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE - 1, 0);
 
@@ -236,15 +267,15 @@ void handleClient(SOCKET clientSocket, sockaddr_in clientAddr) {
             vector<string> words = splitTheString(recievedString);
 
 
-            const char* response;
 
+            string response; 
             if (words[0] == "read") {
                 string fromFile = readFile(path + words[1]);
                 if (fromFile == "Not Found") {
                     response = "Incorrect path.";
                 }
                 else {
-                    response = fromFile.c_str();
+                    response = fromFile;  // Use std::string
                 }
             }
             else if (words[0] == "write" && isFullAccess) {
@@ -273,18 +304,26 @@ void handleClient(SOCKET clientSocket, sockaddr_in clientAddr) {
             }
             else if (words[0] == "up") {
                 path = "ClientFiles/";
+                string direct = ListFilesInDirectory(path);
+                direct += "\n ______________________\n";
+                send(clientSocket, direct.c_str(), direct.length(), 0);
             }
             else if (words[0] == "down") {
-                path += words[1] + "/";
+                if (path == "ClientFiles/") {
+                    path += words[1] + "/";
+            }
+                string direct = ListFilesInDirectory(path);
+                direct += "\n ______________________\n";
+                send(clientSocket, direct.c_str(), direct.length(), 0);
             }
             else if (words[0] == "execute" && isFullAccess) {
 
             }
             else {
-                response = "Invalid Comand. Try again";
-                send(clientSocket, response, strlen(response), 0);
+                response = "Invalid Command. Try again.";
             }
-     
+            send(clientSocket, response.c_str(), response.length(), 0);
+  
         }
         else {
             break;
@@ -297,11 +336,10 @@ void handleClient(SOCKET clientSocket, sockaddr_in clientAddr) {
 
     closesocket(clientSocket);
 
-    {
-        lock_guard<mutex> lock(clientMutex);  //lock_guard -> klase e mutexave
-        activeClientCounter--;
-
-    }
+    
+    lock_guard<mutex> lock(clientMutex);  //lock_guard -> klase e mutexave
+    activeClientCounter--;
+    
     //E njofton kur te lirohet ni slot
     clientCondition.notify_one();
 
@@ -309,7 +347,19 @@ void handleClient(SOCKET clientSocket, sockaddr_in clientAddr) {
 
 
 
-void testFunction();
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 int main() {
 
@@ -342,10 +392,8 @@ int main() {
     serverAddress.sin_addr.s_addr = INADDR_ANY;
     serverAddress.sin_port = htons(PORT);
 
-    int successfulBind = bind(serverSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress));
-
-    if (successfulBind == SOCKET_ERROR) {
-        cerr << "Bind Failed \n";
+    if (bind(serverSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) == SOCKET_ERROR) {
+        cerr << "Bind failed!\n";
         closesocket(serverSocket);
         WSACleanup();
         return 1;
@@ -366,17 +414,13 @@ int main() {
 
 
 
-    struct sockaddr_in clientAddress;
-    SOCKET clientSocket;
-    int clientAddressSize = sizeof(clientAddress);
-    char buffer[BUFFER_SIZE] = { 0 }; //Inicializim me zero si fillim
-
-
+ 
 
 
     while (true) {
-
-        clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddress, &clientAddressSize);
+        struct sockaddr_in clientAddress;
+        int clientAddressSize = sizeof(clientAddress);
+        SOCKET clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddress, &clientAddressSize);
 
         if (clientSocket == INVALID_SOCKET) {
             continue; //Merri tjert
@@ -414,14 +458,13 @@ int main() {
 
         //Kqyr nese ka ne queue
         if (!waitingClients.empty()) {
-            SOCKET clientInQueue = waitingClients.front();
+            SOCKET queuedClient = waitingClients.front();
             waitingClients.pop();
             activeClientCounter++;
 
-            cout << "Connecting queued client. Total clients: " << activeClientCounter << "\n";
+            cout << "Connecting queued client. Active clients: " << activeClientCounter << "\n";
+            thread clientThread(handleClient, queuedClient, clientAddress);
 
-           
-            thread clientThread(handleClient, clientInQueue, clientAddress);
             clientThread.detach();
         }
 
@@ -432,6 +475,7 @@ int main() {
     WSACleanup();
     return 0;
 }
+
 
 
 

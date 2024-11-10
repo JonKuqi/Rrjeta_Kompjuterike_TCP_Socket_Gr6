@@ -31,11 +31,17 @@ int main() {
     sockaddr_in serverAddress;
     serverAddress.sin_family = AF_INET;
     serverAddress.sin_port = htons(PORT);
-    inet_pton(AF_INET, SERVER_IP, &serverAddress.sin_addr);
 
-    // Connect to the server
+    // Convert IP address to binary format and check for errors
+    if (inet_pton(AF_INET, SERVER_IP, &serverAddress.sin_addr) <= 0) {
+        cerr << "Invalid IP address format: " << SERVER_IP << "\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
     if (connect(clientSocket, (sockaddr*)&serverAddress, sizeof(serverAddress)) == SOCKET_ERROR) {
-        cerr << "Connection to server failed!\n";
+        cerr << "Connection to server failed! Error: " << WSAGetLastError() << "\n";
         closesocket(clientSocket);
         WSACleanup();
         return 1;
@@ -47,24 +53,10 @@ int main() {
     char buffer[BUFFER_SIZE];
 
     // Main loop for sending and receiving messages
+    cout << "Enter message (type 'exit' to disconnect): ";
+
     while (true) {
-        cout << "Enter message (type 'exit' to disconnect): ";
-        getline(cin, userInput);
 
-        // Check for exit condition
-        if (userInput == "exit") {
-            cout << "Disconnecting from the server...\n";
-            break;
-        }
-
-        // Send the message to the server
-        int sendResult = send(clientSocket, userInput.c_str(), userInput.length(), 0);
-        if (sendResult == SOCKET_ERROR) {
-            cerr << "Send failed: " << WSAGetLastError() << "\n";
-            break;
-        }
-
-        // Receive response from the server
         int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE - 1, 0);
         if (bytesReceived > 0) {
             buffer[bytesReceived] = '\0'; // Null-terminate the received data
@@ -78,9 +70,27 @@ int main() {
             cerr << "Receive failed: " << WSAGetLastError() << "\n";
             break;
         }
+
+
+        getline(cin, userInput);
+
+        if (userInput == "exit") {
+            cout << "Disconnecting from the server...\n";
+            break;
+        }
+
+        // Send the message to the server
+        int sendResult = send(clientSocket, userInput.c_str(), userInput.length(), 0);
+        if (sendResult == SOCKET_ERROR) {
+            cerr << "Send failed: " << WSAGetLastError() << "\n";
+            break;
+        }
+
+  
+       
     }
 
-    // Cleanup
+
     closesocket(clientSocket);
     WSACleanup();
     return 0;
