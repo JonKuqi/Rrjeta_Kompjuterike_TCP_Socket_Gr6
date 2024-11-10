@@ -62,14 +62,26 @@ if (client.privilege == FULL_ACCESS) {
                 send(client.sock, response.c_str(), response.length(), 0);
             }
 else if (request.rfind("EXECUTE ", 0) == 0) { // Komanda EXECUTE
-                // Ekzekuto komandën e kërkuar nga klienti
                 string command = request.substr(8);
-                system(command.c_str()); // Mund të modifikohet për siguri më të madhe
+                system(command.c_str()); 
                 send(client.sock, "Command executed.\n", 18, 0);
             } else {
                 send(client.sock, "Invalid command.\n", 17, 0);
             }
-        } 
+        } else if (client.privilege == READ_ONLY) {
+            if (request == "READ") {
+                ifstream file("server_data.txt");
+                string line, response;
+                while (getline(file, line)) {
+                    response += line + "\n";
+                }
+                send(client.sock, response.c_str(), response.length(), 0);
+            } else {
+                send(client.sock, "Permission denied.\n", 19, 0);
+            }
+        }
+    }
+}
 
 int main2() {
     WSADATA wsaData;
