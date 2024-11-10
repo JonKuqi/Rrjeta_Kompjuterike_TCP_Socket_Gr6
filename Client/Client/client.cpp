@@ -7,74 +7,139 @@
 
 using namespace std;
 
+#define SERVER_IP "192.168.3.21" // Server IP address
+#define PORT 8080
+#define BUFFER_SIZE 1024
+
+
+
+
+bool connectToServer(SOCKET& clientSocket, sockaddr_in& serverAddress) {
+    clientSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (clientSocket == INVALID_SOCKET) {
+        cerr << "Socket creation failed!\n";
+        return false;
+    }
+    if (connect(clientSocket, (sockaddr*)&serverAddress, sizeof(serverAddress)) == SOCKET_ERROR) {
+        cerr << "Connection to server failed! Error: " << WSAGetLastError() << "\n";
+        closesocket(clientSocket);
+        return false;
+    }
+    cout << "Connected to the server.\n";
+    return true;
+}
+
+
+
+
 int main() {
+
     WSADATA wsaData;
-    SOCKET sock = INVALID_SOCKET;
-    struct sockaddr_in server_addr;
-    char buffer[1024];
-    int bytesReceived;
-
-    // Initialize Winsock
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        cerr << "Failed to initialize Winsock. Error Code: " << WSAGetLastError() << endl;
+        cerr << "WSAStartup failed.\n";
         return 1;
     }
 
-    // Create socket
-    sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (sock == INVALID_SOCKET) {
-        cerr << "Socket creation failed. Error Code: " << WSAGetLastError() << endl;
+
+    SOCKET clientSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (clientSocket == INVALID_SOCKET) {
+        cerr << "Socket creation failed!\n";
         WSACleanup();
         return 1;
     }
 
-    // Define server address and port
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(8080);  // Port should match server's port
-    inet_pton(AF_INET, "127.0.0.1", &server_addr.sin_addr);  // Server IP address
 
-    // Connect to server
-    if (connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
-        cerr << "Connection to server failed. Error Code: " << WSAGetLastError() << endl;
-        closesocket(sock);
+    sockaddr_in serverAddress;
+    serverAddress.sin_family = AF_INET;
+    serverAddress.sin_port = htons(PORT);
+
+
+
+    if (inet_pton(AF_INET, SERVER_IP, &serverAddress.sin_addr) <= 0) {
+        cerr << "Invalid IP address format: " << SERVER_IP << "\n";
+        closesocket(clientSocket);
         WSACleanup();
         return 1;
     }
-    cout << "Connected to server." << endl;
+
+    if (!connectToServer(clientSocket, serverAddress)) {
+        cerr << "Connection to server failed! Error: " << WSAGetLastError() << "\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    //cout << "Connected to the server.\n";
+
+    string userInput;
+    char buffer[BUFFER_SIZE];
 
 
-    string command;
+    cout << "Enter message (type 'exit' to disconnect): ";
+
+    memset(buffer, 0, BUFFER_SIZE); // Clear the buffer before receiving
+    int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE - 1, 0);
+    if (bytesReceived > 0) {
+        buffer[bytesReceived] = '\0'; // Null-terminate the received data
+        cout << "Server: " << buffer << endl;
+    }
+
+
+    //Kryesorja
     while (true) {
-        cout << "Enter command (WRITE, READ, EXECUTE, or QUIT): ";
-        getline(cin, command);
 
-        if (command == "QUIT") {
-            cout << "Disconnecting from server." << endl;
+
+        getline(cin, userInput);
+
+        if (userInput == "exit") {
+            cout << "Disconnecting from the server...\n";
             break;
         }
 
-        // Send command to server
-        if (send(sock, command.c_str(), command.length(), 0) == SOCKET_ERROR) {
-            cerr << "Failed to send message. Error Code: " << WSAGetLastError() << endl;
-            break;
+
+
+
+        // Dergo Mesazh
+        int sendResult = send(clientSocket, userInput.c_str(), userInput.length(), 0);
+
+        if (sendResult == SOCKET_ERROR) {
+            cerr << "Send failed: " << WSAGetLastError() << "\n";
+        }
+        else {
+            // DELAY - Mos me qit prishet se ekzekuton ma shpejt se mun kthen serveri
+            Sleep(50); // Delay of 50 milliseconds
+
+            memset(buffer, 0, BUFFER_SIZE);
+            int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE - 1, 0);
+
+            if (bytesReceived > 0) {
+                buffer[bytesReceived] = '\0';
+                cout << "Server: " << buffer << endl;
+            }
+            else if (bytesReceived == 0) {
+                cout << "Server disconnected.\n";
+                break;
+            }
+            else {
+                //Rikonektohu nese ta ka ba timeOut
+                cerr << "You have been time out \n" << WSAGetLastError() << "\n";
+                closesocket(clientSocket);
+                if (!connectToServer(clientSocket, serverAddress)) {
+                    cerr << "Connection to server failed! Error: " << WSAGetLastError() << "\n";
+                    closesocket(clientSocket);
+                    WSACleanup();
+                    return 1;
+                }
+                cout << "Reconnected to the Server!\n";
+
+            }
         }
 
-        // Receive server response
-        bytesReceived = recv(sock, buffer, sizeof(buffer) - 1, 0);
-        if (bytesReceived > 0) {
-            buffer[bytesReceived] = '\0';
-            cout << "Received from server: " << buffer << endl;
-        } else if (bytesReceived == 0) {
-            cout << "Connection closed by server." << endl;
-            break;
-        } else {
-            cerr << "Failed to receive message. Error Code: " << WSAGetLastError() << endl;
-            break;
-        }
+
     }
 
-    // Clean up
-    closesocket(sock);
+
+    closesocket(clientSocket);
     WSACleanup();
     return 0;
 }

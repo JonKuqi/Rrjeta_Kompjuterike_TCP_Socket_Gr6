@@ -342,7 +342,7 @@ void handleClient(SOCKET clientSocket, sockaddr_in clientAddr, bool wasQueued) {
             // Client disconnected ose timed out
             log("Client timed out: IP = " + string(clientIP) + ", Port = " + to_string(clientPort));
             cout << "Client timed out: IP = " + string(clientIP) + ", Port = " + to_string(clientPort) << endl;
-            
+            activeClientCounter--;
             {
                 lock_guard<mutex> lock(reconnectMutex);
                 reconnectQueue.push({ clientAddr, wasQueued });
@@ -370,7 +370,7 @@ void handleClient(SOCKET clientSocket, sockaddr_in clientAddr, bool wasQueued) {
     // Log  kur disconnect
     log("Client disconnected: IP = " + string(clientIP) + ", Port = " + to_string(clientPort) + ", Time = " + getCurrentTime());
 
-    closesocket(clientSocket);
+      closesocket(clientSocket);
 
     
     lock_guard<mutex> lock(clientMutex);  //lock_guard -> klase e mutexave
@@ -511,11 +511,11 @@ int main() {
             if (!waitingClients.empty() && activeClientCounter < MAX_CONNECTED - 1) {
                 SOCKET queuedClient = waitingClients.front().clientSocket;
                 
-
+                clientsInQueue--;
                 struct sockaddr_in activeQueuedAddress =  waitingClients.front().clientAddress;
 
                 waitingClients.pop_front();
-                activeClientCounter++;
+                activeClientCounter+=2;
                 int activeQueuedAddressSize = sizeof(activeQueuedAddress);
                 
 
@@ -549,7 +549,7 @@ int main() {
 
             unique_lock<mutex> lock(clientMutex);
 
-            if (activeClientCounter < MAX_CONNECTED - 1) {
+            if (activeClientCounter < MAX_CONNECTED) {
                 activeClientCounter++;
                 cout << "New client processing. Active clients: " << activeClientCounter << endl;
 
