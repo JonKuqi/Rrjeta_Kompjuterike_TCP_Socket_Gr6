@@ -14,6 +14,7 @@
 #include <fstream>
 #include <windows.h>
 #include <sstream>
+#include <stdio.h>
 
 
 #pragma comment(lib, "Ws2_32.lib")
@@ -34,7 +35,14 @@ using namespace std;
 int activeClientCounter = 0;
 int clientsInQueue = 0;
 
-deque<SOCKET> waitingClients;
+
+struct ClientData {
+    SOCKET clientSocket;
+    sockaddr_in clientAddress;
+    ClientData(SOCKET socket, sockaddr_in address) : clientSocket(socket), clientAddress(address) {}
+};
+
+deque<ClientData> waitingClients;
 
 
 mutex clientMutex;
@@ -43,6 +51,7 @@ condition_variable clientCondition;
 
 
 string fullAccessClientIp = "192.168.3.21";
+
 
 
 
@@ -476,91 +485,104 @@ int main() {
 
 
     while (true) {
+
+        //Koha qe me ba timeout accepti
+        fd_set readfds;
+        FD_ZERO(&readfds);  
+        FD_SET(serverSocket, &readfds);
+        
+        struct timeval timeout;
+        timeout.tv_sec = 0.5;  
+        timeout.tv_usec = 0;          
+
+       
+        int result = select(0, &readfds, NULL, NULL, &timeout);
+
+
+        if (result == SOCKET_ERROR) {
+            cout << "Select failed with error: " << WSAGetLastError() << endl;
+            continue;  
+        }
+
+        if (result == 0) {
+            // Timeout occurred - Ska connection te reja
+            //cout << "No client connected in the timeout period.\n";
+
+            if (!waitingClients.empty() && activeClientCounter < MAX_CONNECTED - 1) {
+                SOCKET queuedClient = waitingClients.front().clientSocket;
+                
+
+                struct sockaddr_in activeQueuedAddress =  waitingClients.front().clientAddress;
+
+                waitingClients.pop_front();
+                activeClientCounter++;
+                int activeQueuedAddressSize = sizeof(activeQueuedAddress);
+                
+
+                cout << "Connecting queued client. Active clients: " << activeClientCounter << "\n";
+
+                // Handle queued client
+                thread clientThread(handleClient, queuedClient, activeQueuedAddress, true);
+                clientThread.detach();
+            }
+
+            continue;  
+        }
+
+
         if (serverShutdownRequested) {
             cout << "Shutting down server as requested by a client.\n";
             break;
         }
 
 
+        if (FD_ISSET(serverSocket, &readfds)) {
+            struct sockaddr_in clientAddress;
+            int clientAddressSize = sizeof(clientAddress);
 
-        struct sockaddr_in clientAddress;
-        int clientAddressSize = sizeof(clientAddress);
-        SOCKET clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddress, &clientAddressSize);
+            // Accept clientat e ri
+            SOCKET clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddress, &clientAddressSize);
 
-        if (clientSocket == INVALID_SOCKET) {
-            continue; //Merri tjert
-        }
+            if (clientSocket == INVALID_SOCKET) {
+                continue;
+            }
 
+            unique_lock<mutex> lock(clientMutex);
 
+            if (activeClientCounter < MAX_CONNECTED - 1) {
+                activeClientCounter++;
+                cout << "New client processing. Active clients: " << activeClientCounter << endl;
 
-
-        unique_lock<mutex> lock(clientMutex); // Locku per client
-
-        
-        if (activeClientCounter < MAX_CONNECTED - 1) {
-
-            activeClientCounter++;
-            cout << "New client processing. Active client: " << activeClientCounter<<endl;
-
-
-            //E ban handle funksioni nalt
-            thread clientThread (handleClient, clientSocket, clientAddress, false);
-            clientThread.detach();
-
-        }
-        else {
-
-            clientsInQueue++;
-            //E mushne queue
-
-            cout << "Max client number reached, adding to the queue. Number of clients in queue: " << clientsInQueue << endl;
-
-            const char* message = "\nPlease wait till server is free!\n";
-
-            send(clientSocket, message, strlen(message), 0);
-
-            char clientIP[INET_ADDRSTRLEN];
-            inet_ntop(AF_INET, &(clientAddress.sin_addr), clientIP, INET_ADDRSTRLEN);
-
-
-            //PRIORITETI ne DEQUEUE
-            if (string(clientIP) == fullAccessClientIp) {
-                waitingClients.push_front(clientSocket);
-                cout << "Client waiting with full permission!"<<endl;
+              
+                thread clientThread(handleClient, clientSocket, clientAddress, false);
+                clientThread.detach();
             }
             else {
-                waitingClients.push_back(clientSocket);
-                cout << "Client waiting NO full permission!"<<endl;
+                // Nese max shtini ne queue
+                clientsInQueue++;
+                cout << "Max client number reached, adding to the queue. Number of clients in queue: " << clientsInQueue << endl;
+
+                const char* message = "\nPlease wait till server is free!\n";
+                send(clientSocket, message, strlen(message), 0);
+
+                char clientIP[INET_ADDRSTRLEN];
+                inet_ntop(AF_INET, &(clientAddress.sin_addr), clientIP, INET_ADDRSTRLEN);
+
+                // Priority bazuar ne IP
+                if (string(clientIP) == fullAccessClientIp) {
+                    waitingClients.push_front({ clientSocket, clientAddress });
+                    cout << "Client waiting with full permission!" << endl;
+                }
+                else {
+                    waitingClients.push_back({ clientSocket, clientAddress });
+                    cout << "Client waiting without full permission!" << endl;
+                }
+
+                // Unlock mutex for further operations
+                lock.unlock();
             }
 
-            lock.unlock();
-        }
-
         
-
-        // bane lock nese activeVlientCounter < MAX_CONNECTED
-        clientCondition.wait(lock, [] { return activeClientCounter < MAX_CONNECTED; });
-
-
-        //Kqyr nese ka ne queue
-        if (!waitingClients.empty()) {
-         
-
-            SOCKET queuedClient = waitingClients.front();
-            waitingClients.pop_front();
-
-
-            activeClientCounter++;
-
-            cout << "Connecting queued client. Active clients: " << activeClientCounter << "\n";
-
-            
-            thread clientThread(handleClient, queuedClient, clientAddress, true);
-
-            clientThread.detach();
-        }
-        else {
-            cout << "IT IS EMPTYYYYYYYYYYY";
         }
 
 
